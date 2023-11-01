@@ -2,5 +2,6 @@
 # SPDX-FileCopyrightText: 2011-2020 Carles Fernandez-Prades <carles.fernandez@cttc.es>
 # Ignore everything in this directory
 *
+!build.sh
 # Except this file
 !.gitignore
