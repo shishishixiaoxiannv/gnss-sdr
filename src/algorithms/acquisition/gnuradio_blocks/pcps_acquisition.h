@@ -231,6 +231,12 @@ private:
     float first_vs_second_peak_statistic(uint32_t& indext, int32_t& doppler, uint32_t num_doppler_bins, int32_t doppler_max, int32_t doppler_step);
     float max_to_input_power_statistic(uint32_t& indext, int32_t& doppler, uint32_t num_doppler_bins, int32_t doppler_max, int32_t doppler_step);
 
+    // Recovery signal generator functions
+    void signal_gen_init();
+    void generate_codes();
+    void generate_signal(gr_complex data_bit);
+    void dump_time();
+
     volk_gnsssdr::vector<volk_gnsssdr::vector<float>> d_magnitude_grid;
     volk_gnsssdr::vector<float> d_tmp_buffer;
     volk_gnsssdr::vector<std::complex<float>> d_input_signal;
@@ -282,6 +288,46 @@ private:
     bool d_step_two;
     bool d_use_CFAR_algorithm_flag;
     bool d_dump;
+
+    // Recovery signal generator variables
+    std::chrono::high_resolution_clock::time_point start_time;
+    volk_gnsssdr::vector<std::complex<float>> d_recovery_signal_buff;
+    
+    std::vector<gr_complex> sampled_code_data_;
+    std::vector<gr_complex> complex_phase_;
+
+    double d_code_phase;
+    double d_phase;
+
+    uint32_t prn;
+    uint32_t fs_in_;
+    uint32_t num_sats_;
+    uint32_t samples_per_code_;
+    uint32_t d_acq_samples_count;
+
+    unsigned int ms_counter_;
+    unsigned int data_bit_duration_ms_;
+    unsigned int num_of_codes_per_vector_;
+
+    signed int current_data_bit_int_;
+
+    float d_amp_est;
+    float delay_chips;
+    float start_phase_rad;
+
+    bool d_codes_generated;
+    bool d_phase_set;
+    bool d_restart_sic;
+    bool d_repeat_acq;
+    bool d_perform_sic;
+    bool d_spoofer_present;
+    bool d_reset_time;
+    bool d_spoofer_detected;
+    bool d_recovered;
+
+    signed int d_itr;
+    signed int d_global_itr;
+    signed int d_code_delay_diff;
 };
 
 

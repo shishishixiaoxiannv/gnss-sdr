@@ -65,6 +65,13 @@ Concurrent_Map<Gps_Acq_Assist> global_gps_acq_assist_map;
 
 int main(int argc, char** argv)
 {
+    if (argc == 2) {
+    std::string para = argv[1];
+    if (para == "-v" || para == "-V") {
+      std::cout  << " This is the version: "  << "2 "  << std::endl;
+      exit(0);
+    }
+  }
     try
         {
             const std::string intro_help(

@@ -53,6 +53,7 @@ public:
     float pfa2{0.0};
     float samples_per_code{0.0};
     float resampler_ratio{1.0};
+    float amp{0.0};
 
     uint32_t sampled_ms{1U};
     uint32_t ms_per_code{1U};
