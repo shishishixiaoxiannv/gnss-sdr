@@ -214,6 +214,11 @@ public:
         gr_vector_const_void_star& input_items,
         gr_vector_void_star& output_items) override;
 
+    //=========================================mitigation======================================
+    void signal_gen_init();
+    void generate_codes();
+    void generate_signal(gr_complex data_bit);
+
 private:
     friend pcps_acquisition_sptr pcps_make_acquisition(const Acq_Conf& conf_);
     explicit pcps_acquisition(const Acq_Conf& conf_);
@@ -282,6 +287,36 @@ private:
     bool d_step_two;
     bool d_use_CFAR_algorithm_flag;
     bool d_dump;
+
+     // Recovery signal generator variables
+    std::chrono::high_resolution_clock::time_point semperfi_start;
+    volk_gnsssdr::vector<std::complex<float>> d_recovery_signal_buff;
+    
+    std::vector<gr_complex> sampled_code_data_;
+    std::vector<gr_complex> complex_phase_;
+
+    double d_code_phase;
+    double d_phase;
+
+    uint32_t prn;
+    uint32_t fs_in_;
+    uint32_t num_sats_;
+    uint32_t samples_per_code_;
+    uint32_t d_acq_samples_count;
+    
+
+    unsigned int ms_counter_;
+    unsigned int data_bit_duration_ms_;
+    unsigned int num_of_codes_per_vector_;
+
+    signed int current_data_bit_int_;
+
+    float d_amp_est;
+    float delay_chips;
+    float start_phase_rad;
+
+    bool d_codes_generated;
+    bool d_phase_set;
 };
 
 

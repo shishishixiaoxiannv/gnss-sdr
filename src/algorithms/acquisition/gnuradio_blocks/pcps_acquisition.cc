@@ -19,6 +19,15 @@
  * -----------------------------------------------------------------------------
  */
 
+// includes for signal generator
+#include "GPS_L1_CA.h"
+#include "gps_sdr_signal_replica.h"
+#include "Galileo_E1.h"
+#include "Galileo_E5a.h"
+#include "Galileo_E5b.h"
+#include "galileo_e1_signal_replica.h"
+#include "galileo_e5_signal_replica.h"
+
 #include "pcps_acquisition.h"
 #include "GLONASS_L1_L2_CA.h"  // for GLONASS_PRN
 #include "MATH_CONSTANTS.h"    // for TWO_PI
@@ -1024,4 +1033,104 @@ int pcps_acquisition::general_work(int noutput_items __attribute__((unused)),
         }
 
     return 0;
+}
+
+//////////////////////////////////////////////////// Recovery signal generator function
+
+void pcps_acquisition::signal_gen_init()
+{
+    //std::cout << "1473 sig gen int";
+
+    num_sats_ = 1;
+
+    prn = d_gnss_synchro->PRN;
+    fs_in_ = d_acq_parameters.fs_in;
+
+    complex_phase_.reserve(d_acq_samples_count);
+
+    // True if Galileo satellites are present
+    bool galileo_signal = false;
+
+    start_phase_rad = 0;
+    current_data_bit_int_ = 0;
+
+    ms_counter_ = 0;
+
+    samples_per_code_ = round(static_cast<float>(fs_in_) / (GPS_L1_CA_CODE_RATE_CPS / GPS_L1_CA_CODE_LENGTH_CHIPS));
+
+    num_of_codes_per_vector_ = (galileo_signal ? 4 * static_cast<int>(GALILEO_E1_C_SECONDARY_CODE_LENGTH) : 1);
+    data_bit_duration_ms_ = (1e3 / GPS_CA_TELEMETRY_RATE_BITS_SECOND);
+}
+
+
+void pcps_acquisition::generate_codes()
+{
+    //std::cout << "1499 code gen";
+    auto delay_samples = d_code_phase;
+    int delay_chips = static_cast<int>(delay_samples * static_cast<int>(GPS_L1_CA_CODE_LENGTH_CHIPS)) / samples_per_code_;
+
+    sampled_code_data_ = std::vector<gr_complex>(std::vector<gr_complex>(d_acq_samples_count));
+
+    std::array<gr_complex, 64000> code{};
+
+    // Generate one code-period of 1C signal
+    gps_l1_ca_code_gen_complex_sampled(code, prn, fs_in_, static_cast<int>(GPS_L1_CA_CODE_LENGTH_CHIPS) - delay_chips);
+
+    // Concatenate "num_of_codes_per_vector_" codes
+    for (unsigned int i = 0; i < num_of_codes_per_vector_; i++)
+        {
+            memcpy(&(sampled_code_data_[i * samples_per_code_]),
+                code.data(), sizeof(gr_complex) * samples_per_code_);
+        }
+}
+
+
+void pcps_acquisition::generate_signal(gr_complex data_bit)
+{
+    // Set delay samples and doppler
+    auto doppler_Hz = d_gnss_synchro->Acq_doppler_hz;
+
+    // // ONLY FOR DEBUGGING - REMOVE AFTER IMPLEMENTING AMP ESTIMATION
+    // if (d_acq_parameters.amp != 0)
+    // {
+    //     d_amp_est = d_acq_parameters.amp;
+    // }
+
+    unsigned int alignment = volk_get_alignment();
+
+    lv_32fc_t* out = (lv_32fc_t*)volk_malloc(sizeof(gr_complex)*d_acq_samples_count, alignment);
+
+    float phase_step_rad = -static_cast<float>(TWO_PI) * doppler_Hz / static_cast<float>(fs_in_);
+
+    std::array<float, 1> _phase{};
+    _phase[0] = -start_phase_rad;
+    volk_gnsssdr_s32f_sincos_32fc(complex_phase_.data(), -phase_step_rad, _phase.data(), d_acq_samples_count);
+    start_phase_rad += static_cast<float>(d_acq_samples_count) * phase_step_rad;
+
+    unsigned int out_idx = 0;
+    unsigned int i = 0;
+    unsigned int k = 0;
+
+    for (out_idx = 0; out_idx < samples_per_code_; out_idx++)
+    {
+        out[out_idx] = gr_complex(0.0, 0.0);
+    }
+
+    out_idx = 0;
+    for (i = 0; i < num_of_codes_per_vector_; i++)
+    {
+        for (k = 0; k < samples_per_code_; k++)
+            {
+                out[out_idx] = sampled_code_data_[out_idx] * data_bit * complex_phase_[out_idx];
+                out_idx++;
+            }
+
+        ms_counter_ = (ms_counter_ + static_cast<int>(round(1e3 * GPS_L1_CA_CODE_PERIOD_S))) % data_bit_duration_ms_;
+    }
+
+    lv_32fc_t* temp_out = (lv_32fc_t*)volk_malloc(sizeof(gr_complex)*d_acq_samples_count, alignment);
+
+    gr_complex amp_est = gr_complex(-d_amp_est, 0);
+    volk_32fc_s32fc_multiply_32fc(temp_out, out, amp_est, d_acq_samples_count);
+    memcpy(&d_recovery_signal_buff[0], temp_out, sizeof(gr_complex) * d_acq_samples_count);
 }
