@@ -116,6 +116,13 @@ pcps_acquisition::pcps_acquisition(const Acq_Conf& conf_)
     //  d_acq_parameters.max_dwells = 1;  // Activation of d_acq_parameters.bit_transition_flag invalidates the value of d_acq_parameters.max_dwells
     // }
 
+    // mitigation: parameters
+    d_recovery_signal_buff = volk_gnsssdr::vector<std::complex<float>>(d_consumed_samples);
+    d_codes_generated = false;
+    d_itr = 0;
+    d_global_itr = 0;
+    d_reset_time = true;
+
     d_tmp_buffer = volk_gnsssdr::vector<float>(d_fft_size);
     d_fft_codes = volk_gnsssdr::vector<std::complex<float>>(d_fft_size);
     d_input_signal = volk_gnsssdr::vector<std::complex<float>>(d_fft_size);
@@ -269,6 +276,13 @@ void pcps_acquisition::init()
 
     d_num_doppler_bins = static_cast<uint32_t>(std::ceil(static_cast<double>(static_cast<int32_t>(d_acq_parameters.doppler_max) - static_cast<int32_t>(-d_acq_parameters.doppler_max)) / static_cast<double>(d_doppler_step)));
 
+    // mitigation: parameters
+    d_spoofer_present = false;
+    // d_spoofer_detected = false;
+    d_repeat_acq = false;
+    d_restart_sic = false;
+    d_itr = 0;
+
     // Create the carrier Doppler wipeoff signals
     if (d_grid_doppler_wipeoffs.empty())
         {
@@ -361,6 +375,10 @@ void pcps_acquisition::send_positive_acquisition()
                << ", Assist doppler_center " << d_doppler_center;
     d_positive_acq = 1;
 
+    // mitigation: output
+    std::cout << "\n****** PRN " << d_gnss_synchro->PRN << " Params found in " << d_global_itr << " iterations; ******\n " ;
+    d_global_itr = 0;
+    
     if (!d_channel_fsm.expired())
         {
             // the channel FSM is set, so, notify it directly the positive acquisition to minimize delays
@@ -510,6 +528,11 @@ float pcps_acquisition::max_to_input_power_statistic(uint32_t& indext, int32_t& 
     uint32_t index_time = 0U;
     const int32_t effective_fft_size = (d_acq_parameters.bit_transition_flag ? d_fft_size / 2 : d_fft_size);
 
+    // mitigation: parameters
+    double code_phase = 0;
+    calculate_threshold();
+
+
     // Find the correlation peak and the carrier frequency
     for (uint32_t i = 0; i < num_doppler_bins; i++)
         {
@@ -532,6 +555,33 @@ float pcps_acquisition::max_to_input_power_statistic(uint32_t& indext, int32_t& 
         {
             doppler = static_cast<int32_t>(d_doppler_center_step_two + (static_cast<float>(index_doppler) - static_cast<float>(floor(d_num_doppler_bins_step2 / 2.0))) * d_acq_parameters.doppler_step2);
         }
+
+    // mitigation: find the parameters of the max peak
+    if((grid_maximum / d_input_power) > d_threshold)
+    {
+        code_phase = static_cast<double>(std::fmod(static_cast<float>(indext), d_acq_parameters.samples_per_code));
+        d_code_phase = code_phase;
+        d_amp_est = (sqrt(grid_maximum) / effective_fft_size) / effective_fft_size;
+
+        std::cout << "\n============= POTENTIAL SPOOFING DETECTED "<< "PRN " << d_gnss_synchro->PRN << " ITR: " << d_global_itr << " =============";
+                    std::cout << "\nAdversarial code delay: " << code_phase << " Doppler: " << doppler;
+                    std::cout << "\nIteration: " << d_global_itr;
+                    std::cout << "\nCoeff: " << grid_maximum;
+                    std::cout << "\nAmp_est: " << d_amp_est;
+                    std::cout << "\n=====================================================================\n";
+
+        d_spoofer_present = true;
+        d_perform_sic = true;
+
+        if (d_global_itr >= 30)
+            {
+                d_spoofer_present = false;
+                d_repeat_acq = false;
+                d_recovered = true;
+                std::cout << "\n[!] Unable to attenuate. Passing on tracking params without cancellation";
+            }
+            d_itr++;
+    }
 
     return grid_maximum / d_input_power;
 }
@@ -769,6 +819,27 @@ void pcps_acquisition::acquisition_core(uint64_t samp_count)
             lk.lock();
         }
 
+    // mitigation: add
+    if (!d_recovered && d_spoofer_present)
+    {
+        // // If recovery not successful, check for max iterations.
+        // if ((d_global_itr % d_acq_parameters.max_itr == 0 && d_global_itr > 0) || (d_restart_sic))//((d_itr %  d_acq_parameters.max_itr == 0) && d_itr != 0)
+        // {
+        //     auto elapsed = std::chrono::high_resolution_clock::now() - semperfi_start;
+        //     //int time = std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
+        //     //std::cout << "\nMax iterations. Restarting SIC for SV " << d_gnss_synchro->PRN << " Time: " << time / 1e6;
+        //     d_test_statistics = 0;
+        //     d_perform_sic = false;
+        //     d_num_noncoherent_integrations_counter = d_acq_parameters.max_dwells;
+        //     d_restart_sic = false;
+        // }
+        // else
+        // {
+            d_perform_sic = true;
+            return;
+        // }
+    }
+
     if (!d_acq_parameters.bit_transition_flag)
         {
             if (d_test_statistics > d_threshold)
@@ -936,8 +1007,9 @@ int pcps_acquisition::general_work(int noutput_items __attribute__((unused)),
                 }
             return 0;
         }
-
-    switch (d_state)
+    do
+    {
+        switch (d_state)
         {
         case 0:
             {
@@ -949,6 +1021,16 @@ int pcps_acquisition::general_work(int noutput_items __attribute__((unused)),
                 d_mag = 0.0;
                 d_state = 1;
                 d_buffer_count = 0U;
+
+                // mitigation: parameters
+                d_itr = 0;
+                d_codes_generated = false;
+                d_recovered = false;
+                d_repeat_acq = false;
+                d_spoofer_present = false;
+                d_global_itr = 0;
+                d_phase_set = false;
+
                 if (!d_acq_parameters.blocking_on_standby)
                     {
                         d_sample_counter += static_cast<uint64_t>(ninput_items[0]);  // sample counter
@@ -994,6 +1076,10 @@ int pcps_acquisition::general_work(int noutput_items __attribute__((unused)),
                 d_buffer_count += buff_increment;
                 d_sample_counter += static_cast<uint64_t>(buff_increment);
                 consume_each(buff_increment);
+
+                // mitigation
+                d_repeat_acq = false;
+
                 break;
             }
         case 2:
@@ -1009,11 +1095,116 @@ int pcps_acquisition::general_work(int noutput_items __attribute__((unused)),
                         gr::thread::thread d_worker(&pcps_acquisition::acquisition_core, this, d_sample_counter);
                         d_worker_active = true;
                     }
+                
+                // mitigation
+                if (d_perform_sic)
+                {
+                    d_state = 3;
+                    d_spoofer_present = false;
+                }
+                d_repeat_acq = false;
+                d_global_itr++;
+
                 consume_each(0);
                 d_buffer_count = 0U;
                 break;
             }
+        case 3:
+            {
+                d_acq_samples_count = d_data_buffer.size();
+                
+                // Signal generator stuff ------------------------------------------------------------------------
+                if (!d_codes_generated)
+                {
+                    d_codes_generated = true;
+                    signal_gen_init();
+                    generate_codes();
+                }
+                
+                generate_signal(gr_complex(1, 0));
+
+                // Signal generator stuff ------------------------------------------------------------------------
+
+                // Recovery stuff ------------------------------------------------------------------------
+                
+                // Add the generated signal and the incoming signal
+                unsigned int alignment = volk_get_alignment();
+
+                const auto* in = reinterpret_cast<const gr_complex*>(&d_data_buffer[0]);
+                const auto* rec = reinterpret_cast<const gr_complex*>(&d_recovery_signal_buff[0]);
+
+                std::map<float, double> amps;
+
+                if (!d_phase_set)
+                {
+                    for (int degree = 0; degree < 181; degree++)
+                    {
+                        lv_32fc_t* shifted_rec = (lv_32fc_t*)volk_malloc(sizeof(gr_complex)*d_acq_samples_count, alignment);
+                        lv_32fc_t* out = (lv_32fc_t*)volk_malloc(sizeof(gr_complex)*d_acq_samples_count, alignment);
+
+                        double rad = (degree * M_PI) / 180;
+
+                        float *mean = (float *)volk_malloc(sizeof(float), alignment);
+                        float *stddev = (float *)volk_malloc(sizeof(float), alignment);
+                        float* magnitude = (float*)volk_malloc(sizeof(float)*d_acq_samples_count, alignment);
+
+                        gr_complex multiplier = gr_complex(cos(rad), sin(rad));
+
+                        volk_32fc_s32fc_multiply_32fc(shifted_rec, rec, multiplier, d_acq_samples_count);
+
+                        volk_32fc_x2_add_32fc(out, in, shifted_rec, d_acq_samples_count);
+
+                        volk_32fc_magnitude_32f(magnitude, out, d_acq_samples_count);
+
+                        volk_32f_stddev_and_mean_32f_x2(stddev, mean, magnitude, d_acq_samples_count);
+
+                        amps[*mean] = rad;
+                        volk_free(out);
+                        volk_free(shifted_rec);
+                        volk_free(mean);
+                        volk_free(stddev);
+                        volk_free(magnitude);
+                    }
+                    std::map<float, double>::iterator it;
+
+                    it = amps.begin();
+
+                    d_phase = it->second;
+                    d_phase_set = true;
+                }
+
+                lv_32fc_t* shifted_rec = (lv_32fc_t*)volk_malloc(sizeof(gr_complex)*d_acq_samples_count, alignment);
+                lv_32fc_t* out = (lv_32fc_t*)volk_malloc(sizeof(gr_complex)*d_acq_samples_count, alignment);
+
+                gr_complex multiplier = gr_complex(cos(d_phase), sin(d_phase));
+
+                volk_32fc_s32fc_multiply_32fc(shifted_rec, rec, multiplier, d_acq_samples_count);
+
+                volk_32fc_x2_add_32fc(out, in, shifted_rec, d_acq_samples_count);
+
+                memcpy(&d_data_buffer[0], out, sizeof(gr_complex) * d_acq_samples_count);
+
+                // Recovery stuff ------------------------------------------------------------------------
+               
+                // Set acq state for re-acquisition
+
+                // Reset d_magnitude grid
+                d_magnitude_grid = volk_gnsssdr::vector<volk_gnsssdr::vector<float>>(d_num_doppler_bins, volk_gnsssdr::vector<float>(d_fft_size));
+  
+                for (uint32_t doppler_index = 0; doppler_index < d_num_doppler_bins; doppler_index++)
+                {
+                    std::fill(d_magnitude_grid[doppler_index].begin(), d_magnitude_grid[doppler_index].end(), 0.0);
+                }
+
+                update_grid_doppler_wipeoffs();
+
+                d_state = 2;
+                d_repeat_acq = true;
+            }
+
         }
+    }
+    while(d_repeat_acq);
 
     // Send outputs to the monitor
     if (d_acq_parameters.enable_monitor_output)
@@ -1089,6 +1280,14 @@ void pcps_acquisition::generate_signal(gr_complex data_bit)
 {
     // Set delay samples and doppler
     auto doppler_Hz = d_gnss_synchro->Acq_doppler_hz;
+
+
+    // mitigation
+     std::cout << "\n============= SPOOFING MITIGATION "<< "PRN " << d_gnss_synchro->PRN << " =============";
+                    std::cout << "\nAdversarial code delay: " << d_code_phase << " Doppler: " << doppler_Hz;
+                    std::cout << "\nIteration: " << d_global_itr;
+                    std::cout << "\nAmp_est: " << d_amp_est;
+                    std::cout << "\n=====================================================================\n";
 
     // // ONLY FOR DEBUGGING - REMOVE AFTER IMPLEMENTING AMP ESTIMATION
     // if (d_acq_parameters.amp != 0)

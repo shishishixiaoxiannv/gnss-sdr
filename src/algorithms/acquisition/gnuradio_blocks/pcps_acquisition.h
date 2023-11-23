@@ -317,6 +317,15 @@ private:
 
     bool d_codes_generated;
     bool d_phase_set;
+    signed int d_itr;
+    signed int d_global_itr;
+
+    bool d_spoofer_present;
+    bool d_repeat_acq;
+    bool d_perform_sic;
+    bool d_recovered;
+    bool d_reset_time;
+    bool d_restart_sic;
 };
 
 
