@@ -319,6 +319,7 @@ private:
     bool d_phase_set;
     signed int d_itr;
     signed int d_global_itr;
+    int32_t d_index_doppler;
 
     bool d_spoofer_present;
     bool d_repeat_acq;

@@ -43,6 +43,9 @@ void Acq_Conf::SetFromConfiguration(const ConfigurationInterface *configuration,
     blocking = configuration->property(role + ".blocking", blocking);
     dump_filename = configuration->property(role + ".dump_filename", dump_filename);
 
+    // mitigation
+    spoofing_detection = configuration->property(role + ".spoofing_detection", spoofing_detection);
+
     use_automatic_resampler = configuration->property("GNSS-SDR.use_acquisition_resampler", use_automatic_resampler);
 
     if ((sampled_ms % ms_per_code) != 0)

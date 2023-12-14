@@ -36,6 +36,7 @@
 #include "gnss_sdr_filesystem.h"
 #include "gnss_synchro.h"
 #include <boost/math/special_functions/gamma.hpp>
+#include <gnuradio/gr_complex.h>
 #include <gnuradio/io_signature.h>
 #include <matio.h>
 #include <pmt/pmt.h>        // for from_long
@@ -556,20 +557,55 @@ float pcps_acquisition::max_to_input_power_statistic(uint32_t& indext, int32_t& 
             doppler = static_cast<int32_t>(d_doppler_center_step_two + (static_cast<float>(index_doppler) - static_cast<float>(floor(d_num_doppler_bins_step2 / 2.0))) * d_acq_parameters.doppler_step2);
         }
 
+    d_test_statistics = grid_maximum / d_input_power;
     // mitigation: find the parameters of the max peak
-    if((grid_maximum / d_input_power) > d_threshold)
+    if(d_acq_parameters.spoofing_detection && d_test_statistics > d_threshold)
     {
         code_phase = static_cast<double>(std::fmod(static_cast<float>(indext), d_acq_parameters.samples_per_code));
         d_code_phase = code_phase;
+        d_index_doppler = index_doppler;
         d_amp_est = (sqrt(grid_maximum) / effective_fft_size) / effective_fft_size;
 
         std::cout << "\n============= POTENTIAL SPOOFING DETECTED "<< "PRN " << d_gnss_synchro->PRN << " ITR: " << d_global_itr << " =============";
                     std::cout << "\nAdversarial code delay: " << code_phase << " Doppler: " << doppler;
-                    std::cout << "\nIteration: " << d_global_itr;
-                    std::cout << "\nCoeff: " << grid_maximum;
+                    std::cout << "\nCoeff: " << grid_maximum << " " << d_input_power << " " << d_test_statistics << " threshold: "  << d_threshold;
                     std::cout << "\nAmp_est: " << d_amp_est;
                     std::cout << "\n=====================================================================\n";
 
+    //     std::string filename = "/data/project/result/init/";
+    //     filename.append("output_");
+    //     filename.append(std::to_string(d_gnss_synchro->PRN));
+    //     filename.append("_");
+    //     filename.append(std::to_string(d_global_itr));
+    //     filename.append(".txt");
+
+    //     if (fs::exists(filename)){
+    //         filename = "/data/project/result/init/";
+    //         filename.append("output2_");
+    //         filename.append(std::to_string(d_gnss_synchro->PRN));
+    //         filename.append("_");
+    //         filename.append(std::to_string(d_global_itr));
+    //         filename.append(".txt");
+    //     }
+        
+
+    //     std::ofstream outFile(filename);
+
+    //     if (!outFile) {
+    //     std::cerr << "无法打开文件" << std::endl;
+    //     return 1;
+    //     }
+
+    //    outFile << "ITR: " << d_global_itr << " " << d_threshold << " " << num_doppler_bins << " " << effective_fft_size << "\n";
+    //    for(uint32_t i = 0; i < num_doppler_bins; i++) {
+    //         for(uint32_t j = 0; j < effective_fft_size; j++) {
+    //             outFile << (-static_cast<int32_t>(doppler_max) + d_doppler_center + doppler_step * static_cast<int32_t>(i)) << " "; 
+    //             outFile << (static_cast<double>(std::fmod(static_cast<float>(j), d_acq_parameters.samples_per_code))) << " ";
+    //             outFile << " " << (d_magnitude_grid[i][j]/d_input_power) << "\n";
+    //         }
+    //    }
+    //    outFile << "\n";
+    //    outFile.close(); 
         d_spoofer_present = true;
         d_perform_sic = true;
 
@@ -1021,6 +1057,8 @@ int pcps_acquisition::general_work(int noutput_items __attribute__((unused)),
                 d_mag = 0.0;
                 d_state = 1;
                 d_buffer_count = 0U;
+                d_code_phase = 0.0;
+                d_index_doppler = 0;
 
                 // mitigation: parameters
                 d_itr = 0;
@@ -1114,13 +1152,16 @@ int pcps_acquisition::general_work(int noutput_items __attribute__((unused)),
                 d_acq_samples_count = d_data_buffer.size();
                 
                 // Signal generator stuff ------------------------------------------------------------------------
-                if (!d_codes_generated)
-                {
-                    d_codes_generated = true;
-                    signal_gen_init();
-                    generate_codes();
-                }
-                
+                //  if (!d_codes_generated) 
+                // {
+                //     d_codes_generated = true;
+                //     signal_gen_init();
+                //     generate_codes();
+                //  }
+
+                signal_gen_init();
+                generate_codes(); 
+
                 generate_signal(gr_complex(1, 0));
 
                 // Signal generator stuff ------------------------------------------------------------------------
@@ -1179,6 +1220,7 @@ int pcps_acquisition::general_work(int noutput_items __attribute__((unused)),
                 gr_complex multiplier = gr_complex(cos(d_phase), sin(d_phase));
 
                 volk_32fc_s32fc_multiply_32fc(shifted_rec, rec, multiplier, d_acq_samples_count);
+
 
                 volk_32fc_x2_add_32fc(out, in, shifted_rec, d_acq_samples_count);
 
@@ -1283,13 +1325,12 @@ void pcps_acquisition::generate_signal(gr_complex data_bit)
 
 
     // mitigation
-     std::cout << "\n============= SPOOFING MITIGATION "<< "PRN " << d_gnss_synchro->PRN << " =============";
-                    std::cout << "\nAdversarial code delay: " << d_code_phase << " Doppler: " << doppler_Hz;
-                    std::cout << "\nIteration: " << d_global_itr;
-                    std::cout << "\nAmp_est: " << d_amp_est;
-                    std::cout << "\n=====================================================================\n";
+    //  std::cout << "\n============= SPOOFING MITIGATION "<< "PRN " << d_gnss_synchro->PRN << " ITR: " << d_global_itr << " =============";
+    //                 std::cout << "\nAdversarial code delay: " << d_code_phase << " Doppler: " << doppler_Hz;
+    //                 std::cout << "\nAmp_est: " << d_amp_est;
+    //                 std::cout << "\n=====================================================================\n";
 
-    // // ONLY FOR DEBUGGING - REMOVE AFTER IMPLEMENTING AMP ESTIMATION
+    // ONLY FOR DEBUGGING - REMOVE AFTER IMPLEMENTING AMP ESTIMATION
     // if (d_acq_parameters.amp != 0)
     // {
     //     d_amp_est = d_acq_parameters.amp;
@@ -1315,11 +1356,29 @@ void pcps_acquisition::generate_signal(gr_complex data_bit)
         out[out_idx] = gr_complex(0.0, 0.0);
     }
 
+    // const auto* in = reinterpret_cast<const gr_complex*>(&d_data_buffer[0]);
+    
+    // lv_32fc_t* temp_data = (lv_32fc_t*)volk_malloc(sizeof(gr_complex)*d_acq_samples_count, alignment);
+    // lv_32fc_t* data = (lv_32fc_t*)volk_malloc(sizeof(gr_complex)*d_acq_samples_count, alignment);
+                
+    // volk_32fc_x2_multiply_32fc(temp_data, in, d_grid_doppler_wipeoffs[d_index_doppler].data(), d_acq_samples_count);
+    // volk_32fc_x2_multiply_32fc(data, temp_data, sampled_code_data_.data(), d_acq_samples_count);
+
     out_idx = 0;
     for (i = 0; i < num_of_codes_per_vector_; i++)
     {
         for (k = 0; k < samples_per_code_; k++)
             {
+                // gr_complex data_bit_est;
+                // if (data[k].real() < 0 ) {
+                //     data_bit_est = gr_complex(-1, 0);
+                //     out[out_idx] = sampled_code_data_[out_idx] * data_bit_est * complex_phase_[out_idx];
+                // }
+                // else {
+                //     data_bit_est = gr_complex(1, 0);
+                //     out[out_idx] = sampled_code_data_[out_idx] * data_bit_est * complex_phase_[out_idx];
+                // }
+                // out_idx++;
                 out[out_idx] = sampled_code_data_[out_idx] * data_bit * complex_phase_[out_idx];
                 out_idx++;
             }
