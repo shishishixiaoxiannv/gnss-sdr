@@ -7,6 +7,7 @@
 
 set(ACQ_ADAPTER_SOURCES
     gps_l1_ca_pcps_acquisition.cc
+    gps_l1_ca_semperfi_pcps_acquisition.cc
     gps_l1_ca_pcps_assisted_acquisition.cc
     gps_l1_ca_pcps_acquisition_fine_doppler.cc
     gps_l1_ca_pcps_tong_acquisition.cc
@@ -30,6 +31,7 @@ set(ACQ_ADAPTER_SOURCES
 
 set(ACQ_ADAPTER_HEADERS
     gps_l1_ca_pcps_acquisition.h
+    gps_l1_ca_semperfi_pcps_acquisition.h
     gps_l1_ca_pcps_assisted_acquisition.h
     gps_l1_ca_pcps_acquisition_fine_doppler.h
     gps_l1_ca_pcps_tong_acquisition.h

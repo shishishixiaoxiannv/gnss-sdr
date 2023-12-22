@@ -38,8 +38,8 @@
  * -----------------------------------------------------------------------------
  */
 
-#ifndef GNSS_SDR_PCPS_ACQUISITION_H
-#define GNSS_SDR_PCPS_ACQUISITION_H
+#ifndef GNSS_SDR_SEMPERFI_PCPS_ACQUISITION_H
+#define GNSS_SDR_SEMPERFI_PCPS_ACQUISITION_H
 
 #if ARMA_NO_BOUND_CHECKING
 #define ARMA_NO_DEBUG 1
@@ -76,15 +76,15 @@ namespace own = gsl;
 #endif
 
 class Gnss_Synchro;
-class pcps_acquisition;
+class semperfi_pcps_acquisition;
 
 #if GNURADIO_USES_STD_POINTERS
-using pcps_acquisition_sptr = std::shared_ptr<pcps_acquisition>;
+using semperfi_pcps_acquisition_sptr = std::shared_ptr<semperfi_pcps_acquisition>;
 #else
-using pcps_acquisition_sptr = boost::shared_ptr<pcps_acquisition>;
+using semperfi_pcps_acquisition_sptr = boost::shared_ptr<semperfi_pcps_acquisition>;
 #endif
 
-pcps_acquisition_sptr pcps_make_acquisition(const Acq_Conf& conf_);
+semperfi_pcps_acquisition_sptr semperfi_pcps_make_acquisition(const Acq_Conf& conf_);
 
 /*!
  * \brief This class implements a Parallel Code Phase Search Acquisition.
@@ -92,10 +92,10 @@ pcps_acquisition_sptr pcps_make_acquisition(const Acq_Conf& conf_);
  * Check \ref Navitec2012 "An Open Source Galileo E1 Software Receiver",
  * Algorithm 1, for a pseudocode description of this implementation.
  */
-class pcps_acquisition : public gr::block
+class semperfi_pcps_acquisition : public gr::block
 {
 public:
-    ~pcps_acquisition() = default;
+    ~semperfi_pcps_acquisition() = default;
 
     /*!
      * \brief Initializes acquisition algorithm and reserves memory.
@@ -217,11 +217,18 @@ public:
         gr_vector_const_void_star& input_items,
         gr_vector_void_star& output_items);
 
+    // Recovery signal generator functions
+    void signal_gen_init();
+
+    void generate_codes();
+
+    void generate_signal(gr_complex data_bit);
+
     void dump_time();
 
 private:
-    friend pcps_acquisition_sptr pcps_make_acquisition(const Acq_Conf& conf_);
-    explicit pcps_acquisition(const Acq_Conf& conf_);
+    friend semperfi_pcps_acquisition_sptr semperfi_pcps_make_acquisition(const Acq_Conf& conf_);
+    explicit semperfi_pcps_acquisition(const Acq_Conf& conf_);
 
     void update_local_carrier(own::span<gr_complex> carrier_vector, float freq);
     void update_grid_doppler_wipeoffs();
@@ -243,9 +250,8 @@ private:
     volk_gnsssdr::vector<volk_gnsssdr::vector<std::complex<float>>> d_grid_doppler_wipeoffs_step_two;
     volk_gnsssdr::vector<std::complex<float>> d_fft_codes;
     volk_gnsssdr::vector<std::complex<float>> d_data_buffer;
+    
     volk_gnsssdr::vector<lv_16sc_t> d_data_buffer_sc;
-
-    std::chrono::high_resolution_clock::time_point semperfi_start;
 
     std::unique_ptr<gr::fft::fft_complex> d_fft_if;
     std::unique_ptr<gr::fft::fft_complex> d_ifft;
@@ -267,7 +273,18 @@ private:
     float d_test_statistics;
     float d_doppler_center_step_two;
 
-    int32_t d_state;
+    // Pre-Correction Statistics
+    bool d_spoofer_detected;
+    float d_p_doppler_hz;
+    float d_p_delay_samples;
+    float d_p_input_power;
+    uint64_t d_p_sample_counter;
+    uint32_t d_p_nci_counter;
+    arma::fmat d_p_grid;
+    arma::fmat d_p_narrow_grid;
+
+    int32_t d_acq_state; // Control acquisition
+    int32_t d_trk_state; // Control tracking
     int32_t d_positive_acq;
     int32_t d_doppler_center;
     int32_t d_doppler_bias;
@@ -281,6 +298,13 @@ private:
     uint32_t d_num_doppler_bins_step2;
     uint32_t d_dump_channel;
     uint32_t d_buffer_count;
+    uint32_t d_legit_code_delay;
+    uint32_t d_adv_code_delay;
+    
+    signed int d_itr;
+    signed int d_global_itr;
+    signed int d_code_delay_diff;
+    
 
     bool d_active;
     bool d_worker_active;
@@ -288,6 +312,42 @@ private:
     bool d_step_two;
     bool d_use_CFAR_algorithm_flag;
     bool d_dump;
-};
+    bool d_spoofer_present;
+    bool d_repeat_acq;
+    bool d_perform_sic;
+    bool d_recovered;
+    bool d_reset_time;
+    bool d_restart_sic;
 
-#endif  // GNSS_SDR_PCPS_ACQUISITION_H
+    // Recovery signal generator variables
+    std::chrono::high_resolution_clock::time_point semperfi_start;
+    volk_gnsssdr::vector<std::complex<float>> d_recovery_signal_buff;
+    
+    std::vector<gr_complex> sampled_code_data_;
+    std::vector<gr_complex> complex_phase_;
+
+    double d_code_phase;
+    double d_phase;
+
+    uint32_t prn;
+    uint32_t fs_in_;
+    uint32_t num_sats_;
+    uint32_t samples_per_code_;
+    uint32_t d_acq_samples_count;
+    
+
+    unsigned int ms_counter_;
+    unsigned int data_bit_duration_ms_;
+    unsigned int num_of_codes_per_vector_;
+
+    signed int current_data_bit_int_;
+
+    float d_amp_est;
+    float delay_chips;
+    float start_phase_rad;
+
+    bool d_codes_generated;
+    bool d_phase_set;
+};
+ 
+#endif  // GNSS_SDR_SEMPERFI_PCPS_ACQUISITION_H

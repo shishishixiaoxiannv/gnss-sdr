@@ -28,6 +28,7 @@
 #include "gnss_sdr_valve.h"
 #include "gnuplot_i.h"
 #include "gps_l1_ca_pcps_acquisition.h"
+#include "gps_l1_ca_semperfi_pcps_acquisition.h"
 #include "gps_l1_ca_pcps_acquisition_fine_doppler.h"
 #include "gps_l2_m_pcps_acquisition.h"
 #include "gps_l5i_pcps_acquisition.h"
@@ -57,7 +58,7 @@ namespace wht = std;
 
 DEFINE_string(config_file_ptest, std::string(""), "File containing alternative configuration parameters for the acquisition performance test.");
 DEFINE_string(acq_test_input_file, std::string(""), "File containing raw signal data, must be in int8_t format. The signal generator will not be used.");
-DEFINE_string(acq_test_implementation, std::string("GPS_L1_CA_PCPS_Acquisition"), "Acquisition block implementation under test. Alternatives: GPS_L1_CA_PCPS_Acquisition, GPS_L1_CA_PCPS_Acquisition_Fine_Doppler, Galileo_E1_PCPS_Ambiguous_Acquisition, GLONASS_L1_CA_PCPS_Acquisition, GLONASS_L2_CA_PCPS_Acquisition, GPS_L2_M_PCPS_Acquisition, Galileo_E5a_Pcps_Acquisition, GPS_L5i_PCPS_Acquisition");
+DEFINE_string(acq_test_implementation, std::string("GPS_L1_CA_PCPS_Acquisition"), "Acquisition block implementation under test. Alternatives: GPS_L1_CA_SemperFi_PCPS_Acquisition, GPS_L1_CA_PCPS_Acquisition, GPS_L1_CA_PCPS_Acquisition_Fine_Doppler, Galileo_E1_PCPS_Ambiguous_Acquisition, GLONASS_L1_CA_PCPS_Acquisition, GLONASS_L2_CA_PCPS_Acquisition, GPS_L2_M_PCPS_Acquisition, Galileo_E5a_Pcps_Acquisition, GPS_L5i_PCPS_Acquisition");
 
 DEFINE_int32(acq_test_doppler_max, 5000, "Maximum Doppler, in Hz");
 DEFINE_int32(acq_test_doppler_step, 125, "Doppler step, in Hz.");
@@ -179,6 +180,13 @@ protected:
             }
 
         if (implementation == "GPS_L1_CA_PCPS_Acquisition")
+            {
+                signal_id = "1C";
+                system_id = 'G';
+                coherent_integration_time_ms = FLAGS_acq_test_coherent_time_ms;
+                min_integration_ms = 1;
+            }
+        else if (implementation == "GPS_L1_CA_SemperFi_PCPS_Acquisition")
             {
                 signal_id = "1C";
                 system_id = 'G';
@@ -593,6 +601,10 @@ int AcquisitionPerformanceTest::run_receiver()
     if (implementation == "GPS_L1_CA_PCPS_Acquisition")
         {
             acquisition = std::make_shared<GpsL1CaPcpsAcquisition>(config.get(), "Acquisition", 1, 0);
+        }
+    else if (implementation == "GPS_L1_CA_SemperFi_PCPS_Acquisition")
+        {
+            acquisition = std::make_shared<GpsL1CaSemperFiPcpsAcquisition>(config.get(), "Acquisition", 1, 0);
         }
     else if (implementation == "GPS_L1_CA_PCPS_Acquisition_Fine_Doppler")
         {

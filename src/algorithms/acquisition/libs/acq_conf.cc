@@ -6,10 +6,13 @@
  *
  * -----------------------------------------------------------------------------
  *
- * GNSS-SDR is a Global Navigation Satellite System software-defined receiver.
+ * Copyright (C) 2010-2020  (see AUTHORS file for a list of contributors)
+ *
+ * GNSS-SDR is a software defined Global Navigation
+ *          Satellite Systems receiver
+ *
  * This file is part of GNSS-SDR.
  *
- * Copyright (C) 2010-2020  (see AUTHORS file for a list of contributors)
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * -----------------------------------------------------------------------------
@@ -18,7 +21,50 @@
 #include "acq_conf.h"
 #include "item_type_helpers.h"
 #include <glog/logging.h>
+#include <gnuradio/gr_complex.h>
 #include <cmath>
+
+Acq_Conf::Acq_Conf()
+{
+    /* PCPS acquisition configuration */
+    sampled_ms = 1U;
+    ms_per_code = 1U;
+    max_dwells = 1U;
+    samples_per_chip = 2U;
+    chips_per_second = 1023000;
+    doppler_max = 5000;
+    doppler_min = -5000;
+    doppler_step = 250.0;
+    num_doppler_bins_step2 = 4U;
+    doppler_step2 = 125.0;
+    pfa = 0.0;
+    pfa2 = 0.0;
+    fs_in = 4000000;
+    samples_per_ms = 0.0;
+    samples_per_code = 0.0;
+    bit_transition_flag = false;
+    use_CFAR_algorithm_flag = true;
+    dump = false;
+    blocking = true;
+    make_2_steps = false;
+    dump_filename = "";
+    dump_channel = 0U;
+    it_size = sizeof(gr_complex);
+    item_type = "gr_complex";
+    blocking_on_standby = false;
+    use_automatic_resampler = false;
+    resampler_ratio = 1.0;
+    resampled_fs = 0LL;
+    resampler_latency_samples = 0U;
+    sep_max = 500;
+    sep_min = 50;
+    recovery = false;
+    spoofing_detection = false;
+    amp = 0;
+    max_itr = 0;
+    verbose = false;
+    time_stats_filename = "";
+}
 
 
 void Acq_Conf::SetFromConfiguration(const ConfigurationInterface *configuration,
@@ -32,7 +78,7 @@ void Acq_Conf::SetFromConfiguration(const ConfigurationInterface *configuration,
 
     chips_per_second = chip_rate;
 
-    const int64_t fs_in_deprecated = configuration->property("GNSS-SDR.internal_fs_hz", fs_in);
+    int64_t fs_in_deprecated = configuration->property("GNSS-SDR.internal_fs_hz", fs_in);
     fs_in = configuration->property("GNSS-SDR.internal_fs_sps", fs_in_deprecated);
     doppler_max = configuration->property(role + ".doppler_max", doppler_max);
     sampled_ms = configuration->property(role + ".coherent_integration_time_ms", sampled_ms);
@@ -43,9 +89,18 @@ void Acq_Conf::SetFromConfiguration(const ConfigurationInterface *configuration,
     blocking = configuration->property(role + ".blocking", blocking);
     dump_filename = configuration->property(role + ".dump_filename", dump_filename);
 
-    // mitigation
+    sep_max = configuration->property(role + ".sep_max", sep_max);
+    sep_min = configuration->property(role + ".sep_min", sep_min);
+    
+    recovery = configuration->property(role + ".recovery", recovery);
     spoofing_detection = configuration->property(role + ".spoofing_detection", spoofing_detection);
-
+    max_itr = configuration->property(role + ".max_itr", max_itr);
+    verbose = configuration->property(role + ".verbose", verbose);
+    // ONLY FOR DEBUGGING - REMOVE AFTER IMPLEMENTING AMP ESTIMATION
+    time_stats_filename = configuration->property(role + ".time_stats_filename", time_stats_filename);
+    
+    amp = configuration->property(role + ".amp", amp);
+    
     use_automatic_resampler = configuration->property("GNSS-SDR.use_acquisition_resampler", use_automatic_resampler);
 
     if ((sampled_ms % ms_per_code) != 0)
@@ -87,7 +142,6 @@ void Acq_Conf::SetFromConfiguration(const ConfigurationInterface *configuration,
         }
 
     enable_monitor_output = configuration->property("AcquisitionMonitor.enable_monitor", false);
-
     SetDerivedParams();
 }
 
