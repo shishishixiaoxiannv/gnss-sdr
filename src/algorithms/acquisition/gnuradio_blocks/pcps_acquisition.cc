@@ -572,40 +572,6 @@ float pcps_acquisition::max_to_input_power_statistic(uint32_t& indext, int32_t& 
                     std::cout << "\nAmp_est: " << d_amp_est;
                     std::cout << "\n=====================================================================\n";
 
-    //     std::string filename = "/data/project/result/init/";
-    //     filename.append("output_");
-    //     filename.append(std::to_string(d_gnss_synchro->PRN));
-    //     filename.append("_");
-    //     filename.append(std::to_string(d_global_itr));
-    //     filename.append(".txt");
-
-    //     if (fs::exists(filename)){
-    //         filename = "/data/project/result/init/";
-    //         filename.append("output2_");
-    //         filename.append(std::to_string(d_gnss_synchro->PRN));
-    //         filename.append("_");
-    //         filename.append(std::to_string(d_global_itr));
-    //         filename.append(".txt");
-    //     }
-        
-
-    //     std::ofstream outFile(filename);
-
-    //     if (!outFile) {
-    //     std::cerr << "无法打开文件" << std::endl;
-    //     return 1;
-    //     }
-
-    //    outFile << "ITR: " << d_global_itr << " " << d_threshold << " " << num_doppler_bins << " " << effective_fft_size << "\n";
-    //    for(uint32_t i = 0; i < num_doppler_bins; i++) {
-    //         for(uint32_t j = 0; j < effective_fft_size; j++) {
-    //             outFile << (-static_cast<int32_t>(doppler_max) + d_doppler_center + doppler_step * static_cast<int32_t>(i)) << " "; 
-    //             outFile << (static_cast<double>(std::fmod(static_cast<float>(j), d_acq_parameters.samples_per_code))) << " ";
-    //             outFile << " " << (d_magnitude_grid[i][j]/d_input_power) << "\n";
-    //         }
-    //    }
-    //    outFile << "\n";
-    //    outFile.close(); 
         d_spoofer_present = true;
         d_perform_sic = true;
 
@@ -1130,15 +1096,18 @@ int pcps_acquisition::general_work(int noutput_items __attribute__((unused)),
                     }
                 else
                     {
+                        std::cout << "\nstart acquisition!";
                         gr::thread::thread d_worker(&pcps_acquisition::acquisition_core, this, d_sample_counter);
                         d_worker_active = true;
+                        std::cout << "\nfinish acquisition!";
                     }
-                
+
                 // mitigation
                 if (d_perform_sic)
                 {
                     d_state = 3;
                     d_spoofer_present = false;
+                    std::cout << "\nperform sic!";
                 }
                 d_repeat_acq = false;
                 d_global_itr++;
@@ -1152,15 +1121,15 @@ int pcps_acquisition::general_work(int noutput_items __attribute__((unused)),
                 d_acq_samples_count = d_data_buffer.size();
                 
                 // Signal generator stuff ------------------------------------------------------------------------
-                //  if (!d_codes_generated) 
-                // {
-                //     d_codes_generated = true;
-                //     signal_gen_init();
-                //     generate_codes();
-                //  }
+                 if (!d_codes_generated) 
+                {
+                    d_codes_generated = true;
+                    signal_gen_init();
+                    generate_codes();
+                 }
 
-                signal_gen_init();
-                generate_codes(); 
+                // signal_gen_init();
+                // generate_codes(); 
 
                 generate_signal(gr_complex(1, 0));
 
@@ -1323,12 +1292,11 @@ void pcps_acquisition::generate_signal(gr_complex data_bit)
     // Set delay samples and doppler
     auto doppler_Hz = d_gnss_synchro->Acq_doppler_hz;
 
-
     // mitigation
-    //  std::cout << "\n============= SPOOFING MITIGATION "<< "PRN " << d_gnss_synchro->PRN << " ITR: " << d_global_itr << " =============";
-    //                 std::cout << "\nAdversarial code delay: " << d_code_phase << " Doppler: " << doppler_Hz;
-    //                 std::cout << "\nAmp_est: " << d_amp_est;
-    //                 std::cout << "\n=====================================================================\n";
+     std::cout << "\n============= SPOOFING MITIGATION "<< "PRN " << d_gnss_synchro->PRN << " ITR: " << d_global_itr << " =============";
+                    std::cout << "\nAdversarial code delay: " << d_code_phase << " Doppler: " << doppler_Hz;
+                    std::cout << "\nAmp_est: " << d_amp_est;
+                    std::cout << "\n=====================================================================\n";
 
     // ONLY FOR DEBUGGING - REMOVE AFTER IMPLEMENTING AMP ESTIMATION
     // if (d_acq_parameters.amp != 0)
